@@ -17,10 +17,12 @@ public class MultiDriver implements Driver {
     @Override
     public Connection connect(String url, Properties info) throws SQLException {
         if (!acceptsURL(url)) {
-            return null;
+            throw new SQLException(new MultiException(MultiErrorCode.MALFORMED_JDBC_URL,url));
         }
         // Implement connection logic here
-        return new MultiConnection();
+        MultiConnection connection = new MultiConnection();
+        connection
+        return connection;
     }
 
     @Override
