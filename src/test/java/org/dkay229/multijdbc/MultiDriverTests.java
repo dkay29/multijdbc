@@ -7,11 +7,11 @@ import java.sql.*;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class MultiDriverTests {
-    @Test
+    //@Test
     public void testConnect() {
         Exception ex=null;
         try {
-            String url = "jdbc:multisql://localhost:3306/mydatabase";
+            String url = "jdbc:multisql://localhost:8080/mydatabase";
             Class.forName("org.dkay229.multijdbc.MultiDriver");
             Connection conn = DriverManager.getConnection(url, "user", "password");
             Statement stmt = conn.createStatement();

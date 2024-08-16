@@ -1,5 +1,8 @@
 package org.dkay229.multijdbc;
 
+import com.dkay229.msql.common.MsqlErrorCode;
+import com.dkay229.msql.common.MsqlException;
+
 import java.sql.*;
 import java.util.Properties;
 import java.util.logging.Logger;
@@ -17,11 +20,11 @@ public class MultiDriver implements Driver {
     @Override
     public Connection connect(String url, Properties info) throws SQLException {
         if (!acceptsURL(url)) {
-            throw new SQLException(new MultiException(MultiErrorCode.MALFORMED_JDBC_URL,url));
+            throw new SQLException(new MsqlException(MsqlErrorCode.MALFORMED_JDBC_URL,url));
         }
         // Implement connection logic here
-        MultiConnection connection = new MultiConnection();
-        connection
+        MultiConnection connection = new MultiConnection(url,info);
+
         return connection;
     }
 

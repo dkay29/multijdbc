@@ -1,12 +1,47 @@
 package org.dkay229.multijdbc;
 
+import com.dkay229.msql.common.MsqlErrorCode;
+import com.dkay229.msql.common.MsqlException;
+import com.dkay229.msql.proto.DatabaseServiceGrpc;
+import com.dkay229.msql.proto.Dbserver;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+
 import java.sql.*;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
 
 public class MultiConnection implements Connection{
+    private final DatabaseServiceGrpc.DatabaseServiceBlockingStub stub;
+    private Dbserver.Connection rpcConnection;
+    /**
+     * "jdbc:multisql://localhost:3306/mydatabase"
+     * @param url
+     * @param props
+     */
+    public MultiConnection(String url,Properties props) {
+        // Step 1: Create a channel to the server at localhost:8080
+        String[] hostPortDb = url.replace("jdbc:multisql://","").split("[/:]");
+        String host = hostPortDb[0];
+        Integer port = Integer.parseInt(hostPortDb[1]);
+        String dbName = hostPortDb[2];
+        ManagedChannel channel = ManagedChannelBuilder.forAddress(host, port)
+                .usePlaintext() // Disable SSL/TLS for simplicity (use plaintext)
+                .build();
+        this.stub = DatabaseServiceGrpc.newBlockingStub(channel);
+        // rpc Login(LoginRequest) returns (Connection);
+        Dbserver.LoginRequest loginRequest = Dbserver.LoginRequest.newBuilder()
+                .setUserId(props.getProperty("user"))
+                .setToken(props.getProperty("password"))
+                .build();
 
+       this.rpcConnection = stub.login(loginRequest);
+       if (rpcConnection.getErrorMessage()!=null && rpcConnection.getErrorMessage().length()>0) {
+           throw new MsqlException(MsqlErrorCode.BAD_LOGIN_ATTEMPT,rpcConnection.getErrorMessage());
+       }
+
+    }
     /**
      * Creates a {@code Statement} object for sending
      * SQL statements to the database.
