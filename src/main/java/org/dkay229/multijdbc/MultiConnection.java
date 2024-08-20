@@ -15,6 +15,15 @@ import java.util.concurrent.Executor;
 public class MultiConnection implements Connection{
     private final DatabaseServiceGrpc.DatabaseServiceBlockingStub stub;
     private Dbserver.Connection rpcConnection;
+
+    public DatabaseServiceGrpc.DatabaseServiceBlockingStub getStub() {
+        return stub;
+    }
+
+    public Dbserver.Connection getRpcConnection() {
+        return rpcConnection;
+    }
+
     /**
      * "jdbc:multisql://localhost:3306/mydatabase"
      * @param url
@@ -36,11 +45,14 @@ public class MultiConnection implements Connection{
                 .setToken(props.getProperty("password"))
                 .build();
 
-       this.rpcConnection = stub.login(loginRequest);
-       if (rpcConnection.getErrorMessage()!=null && rpcConnection.getErrorMessage().length()>0) {
-           throw new MsqlException(MsqlErrorCode.BAD_LOGIN_ATTEMPT,rpcConnection.getErrorMessage());
-       }
-
+        Dbserver.LoginResponse loginResponse= stub.login(loginRequest);
+        if (!loginResponse.getErrorMessage().isEmpty()) {
+            throw new MsqlException(MsqlErrorCode.BAD_LOGIN_ATTEMPT,loginResponse.getErrorMessage());
+        }
+        this.rpcConnection = Dbserver.Connection.newBuilder()
+                .setConnectionId(loginResponse.getConnectionId())
+                .setConnectionKey(loginResponse.getConnectionKey())
+                .build();
     }
     /**
      * Creates a {@code Statement} object for sending
@@ -1543,4 +1555,5 @@ public class MultiConnection implements Connection{
     public boolean isWrapperFor(Class<?> iface) throws SQLException {
         return false;
     }
+
 }

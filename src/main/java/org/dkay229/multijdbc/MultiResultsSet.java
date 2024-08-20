@@ -1,14 +1,40 @@
 package org.dkay229.multijdbc;
 
+import com.dkay229.msql.proto.Dbserver;
+
 import java.io.InputStream;
 import java.io.Reader;
 import java.math.BigDecimal;
 import java.net.URL;
 import java.sql.*;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Calendar;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class MultiResultsSet implements ResultSet{
+    private final MultiConnection multiConnection;
+    private final Dbserver.ExecuteQueryResponse executeQueryResponse;
+    private CircularBuffer<Dbserver.Row> resultRowBuffer = new CircularBuffer<>(512 );
+    boolean noMoreResultsFromServer = false;
+    private Dbserver.Row cursor =null;
+    private int iCol =1;
+    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
+    HashMap<String,Integer> columnNumberColName = new HashMap<>();
+    List<Dbserver.ColumnMetadata> columnMetadataList ;
+    long recNo=0;
+    public MultiResultsSet(MultiConnection multiConnection, Dbserver.ExecuteQueryResponse executeQueryResponse) {
+        this.multiConnection = multiConnection;
+        this.executeQueryResponse = executeQueryResponse;
+        this.columnMetadataList = executeQueryResponse.getRowMetadata().getColumnsList();
+        for (int colNum=1;colNum<=this.columnMetadataList.size();colNum++) {
+            Dbserver.ColumnMetadata columnMetadata = executeQueryResponse.getRowMetadata().getColumns(colNum-1);
+            columnNumberColName.put(columnMetadata.getName(),colNum);
+        }
+    }
+
     /**
      * Moves the cursor forward one row from its current position.
      * A {@code ResultSet} cursor is initially positioned
@@ -37,6 +63,27 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public boolean next() throws SQLException {
+        if (resultRowBuffer.isEmpty()&&!noMoreResultsFromServer){
+            Dbserver.ResultRowsResponse resultRowsResponse = multiConnection.getStub()
+                    .fetchResultRows(Dbserver.ResultRowsRequest.newBuilder()
+                            .setConnection(Dbserver.Connection.newBuilder()
+                                    .setConnectionKey(multiConnection.getRpcConnection().getConnectionKey())
+                                    .setConnectionId(multiConnection.getRpcConnection().getConnectionId())
+                                    .build())
+                            .setNotMoreThanRowCount(resultRowBuffer.freeSpace())
+                            .build());
+            if (resultRowsResponse.getRowsCount()==0){
+                noMoreResultsFromServer = true;
+            }else {
+                resultRowBuffer.addAll(resultRowsResponse.getRowsList());
+            }
+        }
+        if (!resultRowBuffer.isEmpty()){
+            cursor = resultRowBuffer.get();
+            iCol = 1;
+            recNo++;
+            return true;
+        }
         return false;
     }
 
@@ -68,7 +115,12 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public void close() throws SQLException {
-
+        Dbserver.Connection connection = multiConnection.getStub().closeResults(Dbserver.CloseResultsRequest.newBuilder()
+                .setConnection(Dbserver.Connection.newBuilder()
+                                .setConnectionKey(multiConnection.getRpcConnection().getConnectionKey())
+                                .setConnectionId(multiConnection.getRpcConnection().getConnectionId())
+                                .build())
+                .build());
     }
 
     /**
@@ -103,7 +155,13 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public String getString(int columnIndex) throws SQLException {
-        return "";
+        if (cursor==null){
+            throw new SQLException("No current row");
+        }
+        if (columnIndex<1||columnIndex>cursor.getValuesCount()){
+            throw new SQLException("Invalid column index");
+        }
+        return cursor.getValues(columnIndex-1);
     }
 
     /**
@@ -127,7 +185,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public boolean getBoolean(int columnIndex) throws SQLException {
-        return false;
+        return Boolean.parseBoolean(getString(columnIndex));
     }
 
     /**
@@ -144,7 +202,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public byte getByte(int columnIndex) throws SQLException {
-        return 0;
+        return Byte.parseByte(getString(columnIndex));
     }
 
     /**
@@ -161,7 +219,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public short getShort(int columnIndex) throws SQLException {
-        return 0;
+        return Short.parseShort(getString(columnIndex));
     }
 
     /**
@@ -178,7 +236,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public int getInt(int columnIndex) throws SQLException {
-        return 0;
+        return Integer.parseInt(getString(columnIndex));
     }
 
     /**
@@ -195,7 +253,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public long getLong(int columnIndex) throws SQLException {
-        return 0;
+        return Long.getLong(getString(columnIndex));
     }
 
     /**
@@ -212,7 +270,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public float getFloat(int columnIndex) throws SQLException {
-        return 0;
+        return Float.parseFloat(getString(columnIndex));
     }
 
     /**
@@ -229,7 +287,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public double getDouble(int columnIndex) throws SQLException {
-        return 0;
+        return Double.parseDouble(getString(columnIndex));
     }
 
     /**
@@ -251,7 +309,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public BigDecimal getBigDecimal(int columnIndex, int scale) throws SQLException {
-        return null;
+        return BigDecimal.valueOf(Double.parseDouble(getString(columnIndex)));
     }
 
     /**
@@ -269,7 +327,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public byte[] getBytes(int columnIndex) throws SQLException {
-        return new byte[0];
+        return getString(columnIndex).getBytes();
     }
 
     /**
@@ -286,7 +344,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public Date getDate(int columnIndex) throws SQLException {
-        return null;
+        return Date.valueOf(LocalDate.parse(getString(columnIndex),formatter));
     }
 
     /**
@@ -456,7 +514,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public boolean getBoolean(String columnLabel) throws SQLException {
-        return false;
+        return getBoolean(columnNumberColName.get(columnLabel));
     }
 
     /**
@@ -473,7 +531,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public byte getByte(String columnLabel) throws SQLException {
-        return 0;
+        return getByte(columnNumberColName.get(columnLabel));
     }
 
     /**
@@ -490,7 +548,8 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public short getShort(String columnLabel) throws SQLException {
-        return 0;
+        return getShort(columnNumberColName.get(columnLabel));
+
     }
 
     /**
@@ -507,7 +566,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public int getInt(String columnLabel) throws SQLException {
-        return 0;
+        return getInt(columnNumberColName.get(columnLabel));
     }
 
     /**
@@ -524,7 +583,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public long getLong(String columnLabel) throws SQLException {
-        return 0;
+        return getLong(columnNumberColName.get(columnLabel));
     }
 
     /**
@@ -541,7 +600,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public float getFloat(String columnLabel) throws SQLException {
-        return 0;
+        return getFloat(columnNumberColName.get(columnLabel));
     }
 
     /**
@@ -558,7 +617,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public double getDouble(String columnLabel) throws SQLException {
-        return 0;
+        return getDouble(columnNumberColName.get(columnLabel));
     }
 
     /**
@@ -580,7 +639,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public BigDecimal getBigDecimal(String columnLabel, int scale) throws SQLException {
-        return null;
+        return getBigDecimal(columnNumberColName.get(columnLabel));
     }
 
     /**
@@ -598,7 +657,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public byte[] getBytes(String columnLabel) throws SQLException {
-        return new byte[0];
+        return getBytes(columnNumberColName.get(columnLabel));
     }
 
     /**
@@ -615,7 +674,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public Date getDate(String columnLabel) throws SQLException {
-        return null;
+        return getDate(columnNumberColName.get(columnLabel));
     }
 
     /**
@@ -812,7 +871,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public String getCursorName() throws SQLException {
-        return "";
+        return "theCursor";
     }
 
     /**
@@ -916,7 +975,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public int findColumn(String columnLabel) throws SQLException {
-        return 0;
+        return columnNumberColName.get(columnLabel);
     }
 
     /**
@@ -1036,7 +1095,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public boolean isAfterLast() throws SQLException {
-        return false;
+        return noMoreResultsFromServer;
     }
 
     /**
@@ -1057,7 +1116,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public boolean isFirst() throws SQLException {
-        return false;
+        return recNo==1L;
     }
 
     /**
@@ -1082,7 +1141,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public boolean isLast() throws SQLException {
-        return false;
+        throw new SQLFeatureNotSupportedException("isLast()");
     }
 
     /**
@@ -1099,7 +1158,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public void beforeFirst() throws SQLException {
-
+        cursor=null;
     }
 
     /**

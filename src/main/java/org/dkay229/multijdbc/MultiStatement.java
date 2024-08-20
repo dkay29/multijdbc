@@ -1,5 +1,7 @@
 package org.dkay229.multijdbc;
 
+import com.dkay229.msql.proto.Dbserver;
+
 import java.sql.*;
 
 public class MultiStatement implements Statement {
@@ -32,7 +34,8 @@ public class MultiStatement implements Statement {
      */
     @Override
     public ResultSet executeQuery(String sql) throws SQLException {
-        return new MultiResultsSet();
+        Dbserver.ExecuteQueryResponse executeQueryResponse = this.connection.getStub().executeQuery(Dbserver.ExecuteQueryRequest.newBuilder().setSql(sql).build());
+        return new MultiResultsSet(this.connection, executeQueryResponse);
     }
 
     /**
