@@ -13,16 +13,7 @@ import java.util.Properties;
 import java.util.concurrent.Executor;
 
 public class MultiConnection implements Connection{
-    private final DatabaseServiceGrpc.DatabaseServiceBlockingStub stub;
-    private Dbserver.Connection rpcConnection;
-
-    public DatabaseServiceGrpc.DatabaseServiceBlockingStub getStub() {
-        return stub;
-    }
-
-    public Dbserver.Connection getRpcConnection() {
-        return rpcConnection;
-    }
+    private MultiServerClient multiServerClient=null;
 
     /**
      * "jdbc:multisql://localhost:3306/mydatabase"
@@ -30,29 +21,12 @@ public class MultiConnection implements Connection{
      * @param props
      */
     public MultiConnection(String url,Properties props) {
-        // Step 1: Create a channel to the server at localhost:8080
-        String[] hostPortDb = url.replace("jdbc:multisql://","").split("[/:]");
-        String host = hostPortDb[0];
-        Integer port = Integer.parseInt(hostPortDb[1]);
-        String dbName = hostPortDb[2];
-        ManagedChannel channel = ManagedChannelBuilder.forAddress(host, port)
-                .usePlaintext() // Disable SSL/TLS for simplicity (use plaintext)
-                .build();
-        this.stub = DatabaseServiceGrpc.newBlockingStub(channel);
-        // rpc Login(LoginRequest) returns (Connection);
-        Dbserver.LoginRequest loginRequest = Dbserver.LoginRequest.newBuilder()
-                .setUserId(props.getProperty("user"))
-                .setToken(props.getProperty("password"))
-                .build();
-
-        Dbserver.LoginResponse loginResponse= stub.login(loginRequest);
-        if (!loginResponse.getErrorMessage().isEmpty()) {
-            throw new MsqlException(MsqlErrorCode.BAD_LOGIN_ATTEMPT,loginResponse.getErrorMessage());
+        try {
+            multiServerClient = new MultiServerClient(url,props);
+        } catch (Exception e) {
+            multiServerClient=null;
+            throw new RuntimeException("connecting as "+props.getProperty("username"),e);
         }
-        this.rpcConnection = Dbserver.Connection.newBuilder()
-                .setConnectionId(loginResponse.getConnectionId())
-                .setConnectionKey(loginResponse.getConnectionKey())
-                .build();
     }
     /**
      * Creates a {@code Statement} object for sending
@@ -74,7 +48,7 @@ public class MultiConnection implements Connection{
      */
     @Override
     public Statement createStatement() throws SQLException {
-        return new MultiStatement(this);
+        return new MultiStatement(multiServerClient);
     }
 
     /**

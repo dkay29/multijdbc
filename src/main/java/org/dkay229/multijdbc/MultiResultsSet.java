@@ -15,23 +15,20 @@ import java.util.List;
 import java.util.Map;
 
 public class MultiResultsSet implements ResultSet{
-    private final MultiConnection multiConnection;
-    private final Dbserver.ExecuteQueryResponse executeQueryResponse;
+    final MultiServerClient multiServerClient;
     private CircularBuffer<Dbserver.Row> resultRowBuffer = new CircularBuffer<>(512 );
     boolean noMoreResultsFromServer = false;
     private Dbserver.Row cursor =null;
     private int iCol =1;
     DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
     HashMap<String,Integer> columnNumberColName = new HashMap<>();
-    List<Dbserver.ColumnMetadata> columnMetadataList ;
+    List<Dbserver.ColumnMetadataOrBuilder> columnMetadataList ;
     long recNo=0;
-    public MultiResultsSet(MultiConnection multiConnection, Dbserver.ExecuteQueryResponse executeQueryResponse) {
-        this.multiConnection = multiConnection;
-        this.executeQueryResponse = executeQueryResponse;
-        this.columnMetadataList = executeQueryResponse.getRowMetadata().getColumnsList();
+    public MultiResultsSet(MultiServerClient multiServerClient,List<Dbserver.ColumnMetadataOrBuilder> columnMetadataList) {
+        this.multiServerClient =multiServerClient;
+        this.columnMetadataList = columnMetadataList;
         for (int colNum=1;colNum<=this.columnMetadataList.size();colNum++) {
-            Dbserver.ColumnMetadata columnMetadata = executeQueryResponse.getRowMetadata().getColumns(colNum-1);
-            columnNumberColName.put(columnMetadata.getName(),colNum);
+            columnNumberColName.put(columnMetadataList.get(colNum-1).getName(),colNum);
         }
     }
 
@@ -64,14 +61,7 @@ public class MultiResultsSet implements ResultSet{
     @Override
     public boolean next() throws SQLException {
         if (resultRowBuffer.isEmpty()&&!noMoreResultsFromServer){
-            Dbserver.ResultRowsResponse resultRowsResponse = multiConnection.getStub()
-                    .fetchResultRows(Dbserver.ResultRowsRequest.newBuilder()
-                            .setConnection(Dbserver.Connection.newBuilder()
-                                    .setConnectionKey(multiConnection.getRpcConnection().getConnectionKey())
-                                    .setConnectionId(multiConnection.getRpcConnection().getConnectionId())
-                                    .build())
-                            .setNotMoreThanRowCount(resultRowBuffer.freeSpace())
-                            .build());
+            Dbserver.ResultRowsResponseOrBuilder resultRowsResponse = multiServerClient.fetchResultRows(resultRowBuffer.freeSpace());
             if (resultRowsResponse.getRowsCount()==0){
                 noMoreResultsFromServer = true;
             }else {
@@ -115,12 +105,7 @@ public class MultiResultsSet implements ResultSet{
      */
     @Override
     public void close() throws SQLException {
-        Dbserver.Connection connection = multiConnection.getStub().closeResults(Dbserver.CloseResultsRequest.newBuilder()
-                .setConnection(Dbserver.Connection.newBuilder()
-                                .setConnectionKey(multiConnection.getRpcConnection().getConnectionKey())
-                                .setConnectionId(multiConnection.getRpcConnection().getConnectionId())
-                                .build())
-                .build());
+        multiServerClient.close();
     }
 
     /**
