@@ -2,12 +2,16 @@ package org.dkay229.multijdbc;
 
 import com.dkay229.msql.common.MsqlErrorCode;
 import com.dkay229.msql.common.MsqlException;
+import com.dkay229.msql.domain.DbCli;
 import com.dkay229.msql.proto.DatabaseServiceGrpc;
 import com.dkay229.msql.proto.Dbserver;
+import com.dkay229.msql.
+
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
 import java.util.Properties;
 
 @Slf4j
@@ -45,8 +49,13 @@ public class MultiServerClient {
         }
         return rpcStub;
     }
-    public Dbserver.ExecuteQueryResponseOrBuilder executeQuery(String sql) {
-        return loggedInStub().executeQuery(Dbserver.ExecuteQueryRequest.newBuilder().setSql(sql).build());
+    public DbCli.ExecuteQueryResponse executeQuery(String sql) {
+
+        Dbserver.ExecuteQueryResponse r=loggedInStub().executeQuery(Dbserver.ExecuteQueryRequest.newBuilder().setSql(sql).build());
+        ArrayList<DbCli.ColumnMetadata> columnMetadata = new ArrayList<>();
+        for (Dbserver.ColumnMetadata c:r.getRowMetadata().getColumnsList()) {
+            columnMetadata.add(new DbCli.ColumnMetadata(c.getName(),c.getType(),c.getSize()));
+        }
     }
     public Dbserver.ResultRowsResponseOrBuilder fetchResultRows(int notMoreThan) {
         return loggedInStub().fetchResultRows(Dbserver.ResultRowsRequest.newBuilder()
