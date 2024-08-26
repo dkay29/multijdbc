@@ -2,17 +2,19 @@ package org.dkay229.multijdbc;
 
 import com.dkay229.msql.common.MsqlErrorCode;
 import com.dkay229.msql.common.MsqlException;
-import com.dkay229.msql.domain.DbCli;
+import com.dkay229.msql.domain.*;
 import com.dkay229.msql.proto.DatabaseServiceGrpc;
 import com.dkay229.msql.proto.Dbserver;
-import com.dkay229.msql.
+
 
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class MultiServerClient {
@@ -49,22 +51,30 @@ public class MultiServerClient {
         }
         return rpcStub;
     }
-    public DbCli.ExecuteQueryResponse executeQuery(String sql) {
+    public ExecuteQueryResponse executeQuery(String sql) {
 
         Dbserver.ExecuteQueryResponse r=loggedInStub().executeQuery(Dbserver.ExecuteQueryRequest.newBuilder().setSql(sql).build());
-        ArrayList<DbCli.ColumnMetadata> columnMetadata = new ArrayList<>();
+        ArrayList<ColumnMetadata> columnMetadata = new ArrayList<>();
         for (Dbserver.ColumnMetadata c:r.getRowMetadata().getColumnsList()) {
-            columnMetadata.add(new DbCli.ColumnMetadata(c.getName(),c.getType(),c.getSize()));
+            columnMetadata.add(new ColumnMetadata(c.getName(), ColumnMetadata.CoumnTypeEnum.valueOf(c.getType().name()),c.getSize()));
         }
+        RowMetadata rowMetadata = new RowMetadata(columnMetadata);
+        return new ExecuteQueryResponse(r.getStatusCode(),r.getErrorMessage(),rowMetadata);
     }
-    public Dbserver.ResultRowsResponseOrBuilder fetchResultRows(int notMoreThan) {
-        return loggedInStub().fetchResultRows(Dbserver.ResultRowsRequest.newBuilder()
+    public ResultRowsResponse fetchResultRows(int notMoreThan) {
+        Dbserver.ResultRowsResponse dbRowsResp = loggedInStub().fetchResultRows(Dbserver.ResultRowsRequest.newBuilder()
                 .setConnection(Dbserver.Connection.newBuilder()
                         .setConnectionKey(rpcConnection.getConnectionKey())
                         .setConnectionId(rpcConnection.getConnectionId())
                         .build())
                 .setNotMoreThanRowCount(notMoreThan)
                 .build());
+        ArrayList<Row> rows = new ArrayList<>();
+        for (Dbserver.Row r:dbRowsResp.getRowsList()) {
+            List<String> row = new ArrayList<>(r.getValuesList());
+            rows.add(new Row(row));
+        }
+        return new ResultRowsResponse(rows);
     }
     public void close() {
 

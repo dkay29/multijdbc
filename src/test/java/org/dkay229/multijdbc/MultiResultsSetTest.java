@@ -1,35 +1,43 @@
 package org.dkay229.multijdbc;
 
+import com.dkay229.msql.domain.*;
 import com.dkay229.msql.proto.Dbserver;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 
+import java.sql.SQLException;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 
 class MultiResultsSetTest {
-    @Mock
-    MultiServerClient multiServerClient;
 
-    @Mock
-    Dbserver.RowMetadataOrBuilder rowMetadataOrBuilder;
 
-    @Mock
-    Dbserver.ExecuteQueryResponseOrBuilder executeQueryResponseOrBuilder;
-    @BeforeEach
-    void setUp() {
-    }
-
-    @AfterEach
-    void tearDown() {
-    }
 
     @Test
     void next() {
-        when(executeQueryResponseOrBuilder.getRowMetadata()).thenReturn(rowMetadataOrBuilder);
+        Exception ex=null;
+        try {
+            RowMetadata rowMetadata = Mockito.mock(RowMetadata.class);
+            MultiServerClient multiServerClient = Mockito.mock(MultiServerClient.class);
+            ResultRowsResponse resultRowsResponse = Mockito.mock(ResultRowsResponse.class);
+
+            when(rowMetadata.getColumnMetadata()).thenReturn(List.of(new ColumnMetadata("name", ColumnMetadata.CoumnTypeEnum.STRING, 10)));
+            MultiResultsSet multiResultsSet = new MultiResultsSet(multiServerClient, rowMetadata.getColumnMetadata());
+            when(multiServerClient.fetchResultRows(any())).thenReturn(resultRowsResponse);
+            when(resultRowsResponse.getRows()).thenReturn(List.of(new Row(List.of("value1")), new Row(List.of("value2")), new Row(List.of("value3"))));
+            assertEquals("value1", multiResultsSet.getString(1));
+        } catch (SQLException e) {
+            ex=e;
+        }
+        assertNull(ex);
     }
 
     @Test

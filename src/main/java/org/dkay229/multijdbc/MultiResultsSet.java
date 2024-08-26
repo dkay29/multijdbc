@@ -1,5 +1,8 @@
 package org.dkay229.multijdbc;
 
+import com.dkay229.msql.domain.ColumnMetadata;
+import com.dkay229.msql.domain.ResultRowsResponse;
+import com.dkay229.msql.domain.Row;
 import com.dkay229.msql.proto.Dbserver;
 
 import java.io.InputStream;
@@ -16,15 +19,15 @@ import java.util.Map;
 
 public class MultiResultsSet implements ResultSet{
     final MultiServerClient multiServerClient;
-    private CircularBuffer<Dbserver.Row> resultRowBuffer = new CircularBuffer<>(512 );
+    private CircularBuffer<Row> resultRowBuffer = new CircularBuffer<>(512 );
     boolean noMoreResultsFromServer = false;
-    private Dbserver.Row cursor =null;
+    private Row cursor =null;
     private int iCol =1;
     DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
     HashMap<String,Integer> columnNumberColName = new HashMap<>();
-    List<Dbserver.ColumnMetadataOrBuilder> columnMetadataList ;
+    List<ColumnMetadata> columnMetadataList ;
     long recNo=0;
-    public MultiResultsSet(MultiServerClient multiServerClient,List<Dbserver.ColumnMetadataOrBuilder> columnMetadataList) {
+    public MultiResultsSet(MultiServerClient multiServerClient,List<ColumnMetadata> columnMetadataList) {
         this.multiServerClient =multiServerClient;
         this.columnMetadataList = columnMetadataList;
         for (int colNum=1;colNum<=this.columnMetadataList.size();colNum++) {
@@ -61,11 +64,11 @@ public class MultiResultsSet implements ResultSet{
     @Override
     public boolean next() throws SQLException {
         if (resultRowBuffer.isEmpty()&&!noMoreResultsFromServer){
-            Dbserver.ResultRowsResponseOrBuilder resultRowsResponse = multiServerClient.fetchResultRows(resultRowBuffer.freeSpace());
-            if (resultRowsResponse.getRowsCount()==0){
+            ResultRowsResponse resultRowsResponse = multiServerClient.fetchResultRows(resultRowBuffer.freeSpace());
+            if (resultRowsResponse.getRows().isEmpty()){
                 noMoreResultsFromServer = true;
             }else {
-                resultRowBuffer.addAll(resultRowsResponse.getRowsList());
+                resultRowBuffer.addAll(resultRowsResponse.getRows());
             }
         }
         if (!resultRowBuffer.isEmpty()){
@@ -143,10 +146,10 @@ public class MultiResultsSet implements ResultSet{
         if (cursor==null){
             throw new SQLException("No current row");
         }
-        if (columnIndex<1||columnIndex>cursor.getValuesCount()){
+        if (columnIndex<1||columnIndex>cursor.getValues().size()){
             throw new SQLException("Invalid column index");
         }
-        return cursor.getValues(columnIndex-1);
+        return cursor.getValues().get(columnIndex-1);
     }
 
     /**
